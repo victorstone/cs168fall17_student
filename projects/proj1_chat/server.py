@@ -13,7 +13,7 @@ HOST = ''
 COMMANDS = {'/create', '/join', '/list'}
 
 def is_valid_command(message):
-    message = message.rstrip("\n ")
+    message = message.rstrip()
     command_with_args = message.split(" ", 1)
     command = command_with_args[0]
     if message.startswith("/"):
@@ -98,8 +98,8 @@ def chat_server():
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_NO_CHANNEL_EXISTS.replace("{0}",
                                                   possible_arguments)).ljust(200))
                                     elif sock in channel_sockets_map[possible_arguments]:
-                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + "No room named " + possible_arguments + " found"
-                                                  .ljust(200)))
+                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + "Room named " + possible_arguments + " already created"
+                                                   ).ljust(200))
                                     else:
                                         print "User " + socket_username_map[sock] + " is joining"
                                         if sock in socket_channel_map:
