@@ -19,7 +19,10 @@ def is_valid_command(message):
     if message.startswith("/"):
         if command in COMMANDS:
             if command == '/create' or command == '/join':
-                return command, command_with_args[1]
+                if len(command_with_args) > 1:
+                    return command, command_with_args[1]
+                else:
+                    return command, ""
             else:
                 return command, ""
     return command, ""
@@ -74,26 +77,26 @@ def chat_server():
                                     sock.send(channels.ljust(200))
                                 elif possible_command == "/create":
                                     if possible_arguments == "":
-                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CREATE_REQUIRES_ARGUMENT + "\n").ljust(200))
+                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CREATE_REQUIRES_ARGUMENT).ljust(200))
                                     elif possible_arguments in channel_sockets_map:
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CHANNEL_EXISTS.replace("{0}",
-                                                  possible_arguments) + "\n").ljust(200))
+                                                  possible_arguments)).ljust(200))
                                     else:
                                         if sock in socket_channel_map:
                                             broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                                       utils.SERVER_CLIENT_LEFT_CHANNEL
                                                       .replace("{0}", socket_username_map[sock])
-                                                      + "\n", socket_list=channel_sockets_map[socket_channel_map[sock]])
+                                                      , socket_list=channel_sockets_map[socket_channel_map[sock]])
                                             channel_sockets_map[socket_channel_map[sock]].remove(sock)
                                         channel_sockets_map[possible_arguments] = {sock}
                                         socket_channel_map[sock] = possible_arguments
                                 # it's gotta be /join
                                 elif possible_command == "/join":
                                     if possible_arguments == "":
-                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_JOIN_REQUIRES_ARGUMENT + "\n".ljust(200)))
+                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_JOIN_REQUIRES_ARGUMENT).ljust(200))
                                     elif possible_arguments not in channel_sockets_map:
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_NO_CHANNEL_EXISTS.replace("{0}",
-                                                  possible_arguments) + "\n".ljust(200)))
+                                                  possible_arguments)).ljust(200))
                                     elif sock in channel_sockets_map[possible_arguments]:
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + "No room named " + possible_arguments + " found"
                                                   .ljust(200)))
@@ -102,22 +105,22 @@ def chat_server():
                                         if sock in socket_channel_map:
                                             broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                                       utils.SERVER_CLIENT_LEFT_CHANNEL
-                                                      .replace("{0}", possible_arguments) + "\n",
+                                                      .replace("{0}", possible_arguments),
                                                       channel_sockets_map[socket_channel_map[sock]])
                                             channel_sockets_map[socket_channel_map[sock]].remove(sock)
                                         channel_sockets_map[possible_arguments].add(sock)
                                         socket_channel_map[sock] = possible_arguments
                                         broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                                   utils.SERVER_CLIENT_JOINED_CHANNEL
-                                                  .replace("{0}", socket_username_map[sock]) + "\n",
+                                                  .replace("{0}", socket_username_map[sock]),
                                                   socket_list=channel_sockets_map[possible_arguments])
                                 else:
                                     sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_INVALID_CONTROL_MESSAGE
-                                                 .replace("{0}", possible_command).ljust(200)))
+                                                 .replace("{0}", possible_command)).ljust(200))
 
                             else:
                                 if sock not in socket_channel_map:
-                                    sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CLIENT_NOT_IN_CHANNEL.ljust(200)))
+                                    sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CLIENT_NOT_IN_CHANNEL).ljust(200))
                                 else :
                                     broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                               '[' + socket_username_map[sock] + '] ' + data.rstrip(" "),
@@ -127,7 +130,7 @@ def chat_server():
                         broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                   utils.SERVER_CLIENT_LEFT_CHANNEL
                                   .replace("{0}", socket_username_map[sock])
-                                  + "\n", socket_list=channel_sockets_map[socket_channel_map[sock]])
+                                  , socket_list=channel_sockets_map[socket_channel_map[sock]])
                         channel_sockets_map[socket_channel_map[sock]].remove(sock)
                         if sock in SOCKET_LIST:
                             SOCKET_LIST.remove(sock)
@@ -141,19 +144,8 @@ def chat_server():
 
                         # exception
                 except Exception as e:
+                    print e
                     print e.message
-                    broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
-                              utils.SERVER_CLIENT_LEFT_CHANNEL
-                              .replace("{0}", socket_username_map[sock])
-                              + "\n", socket_list=channel_sockets_map[socket_channel_map[sock]])
-                    channel_sockets_map[socket_channel_map[sock]].remove(sock)
-                    if sock in SOCKET_LIST:
-                        SOCKET_LIST.remove(sock)
-                    if sock in socket_channel_map:
-                        if sock in channel_sockets_map[socket_channel_map[sock]]:
-                            channel_sockets_map[socket_channel_map[sock]].remove(sock)
-                        del socket_channel_map[sock]
-                    del socket_username_map[sock]
                     continue
 
     server_socket.close()
