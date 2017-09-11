@@ -66,7 +66,7 @@ def chat_server():
                         else:
                             # there is something in the socket
                             possible_command, possible_arguments = is_valid_command(data)
-                            if possible_command in COMMANDS:
+                            if possible_command.startswith("/"):
                                 if possible_command == "/list":
                                     channels = utils.CLIENT_WIPE_ME + "\r"
                                     for key in channel_sockets_map:
@@ -88,15 +88,15 @@ def chat_server():
                                         channel_sockets_map[possible_arguments] = {sock}
                                         socket_channel_map[sock] = possible_arguments
                                 # it's gotta be /join
-                                elif possible_command == "/list":
+                                elif possible_command == "/join":
                                     if possible_arguments == "":
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_JOIN_REQUIRES_ARGUMENT + "\n".ljust(200)))
                                     elif possible_arguments not in channel_sockets_map:
                                         sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_NO_CHANNEL_EXISTS.replace("{0}",
                                                   possible_arguments) + "\n".ljust(200)))
                                     elif sock in channel_sockets_map[possible_arguments]:
-                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + "lol" 
-                                                  + "\n".ljust(200)))
+                                        sock.send((utils.CLIENT_WIPE_ME + "\r" + "No room named " + possible_arguments + " found"
+                                                  .ljust(200)))
                                     else:
                                         print "User " + socket_username_map[sock] + " is joining"
                                         if sock in socket_channel_map:
@@ -111,9 +111,13 @@ def chat_server():
                                                   utils.SERVER_CLIENT_JOINED_CHANNEL
                                                   .replace("{0}", socket_username_map[sock]) + "\n",
                                                   socket_list=channel_sockets_map[possible_arguments])
+                                else:
+                                    sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_INVALID_CONTROL_MESSAGE
+                                                 .replace("{0}", possible_command).ljust(200)))
+
                             else:
                                 if sock not in socket_channel_map:
-                                    sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CLIENT_NOT_IN_CHANNEL + "\n".ljust(200)))
+                                    sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CLIENT_NOT_IN_CHANNEL.ljust(200)))
                                 else :
                                     broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                               '[' + socket_username_map[sock] + '] ' + data.rstrip(" "),
