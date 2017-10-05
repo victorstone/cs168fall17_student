@@ -38,6 +38,7 @@ def chat_server():
     channel_sockets_map = {}
     socket_channel_map = {}
 
+    socket_data_map = {}
     # add server socket object to the list of readable connections
     SOCKET_LIST.append(server_socket)
 
@@ -60,8 +61,15 @@ def chat_server():
                 # process data recieved from client,
                 try:
                     # receiving data from the socket.
-                    data = sock.recv(RECV_BUFFER, socket.MSG_WAITALL)
-                    if data:
+                    data = sock.recv(RECV_BUFFER)
+                    print len(data)
+                    if data and len(data) < 200:
+                        if sock in socket_data_map:
+                            socket_data_map[sock] += data
+                        else:
+                            socket_data_map[sock] = data
+                    if len(socket_data_map[sock]) == 200:
+                        del socket_data_map[sock]
                         if sock not in socket_username_map:
                             username = data.rstrip()
                             socket_username_map[sock] = username
@@ -121,7 +129,7 @@ def chat_server():
                             else:
                                 if sock not in socket_channel_map:
                                     sock.send((utils.CLIENT_WIPE_ME + "\r" + utils.SERVER_CLIENT_NOT_IN_CHANNEL).ljust(200))
-                                else :
+                                else:
                                     broadcast(server_socket, sock, utils.CLIENT_WIPE_ME + "\r" +
                                               '[' + socket_username_map[sock] + '] ' + data.rstrip(" "),
                                               socket_list=channel_sockets_map[socket_channel_map[sock]])

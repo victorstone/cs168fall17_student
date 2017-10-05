@@ -6,11 +6,32 @@ import sim.basics as basics
 # We define infinity as a distance of 16.
 INFINITY = 16
 
+class Route:
+    def __init__(self, distance, port, time):
+        self.distance = distance
+        self.port = port
+        self.time = time
+
+    def get_distance(self):
+        return self.distance
+
+    def get_port(self):
+        return self.port
+
+    def get_time(self):
+        return self.time
+
+    def update_distance(self, new_distance):
+        self.distance = new_distance
+
+    def update_time(self, new_time):
+        self.time = new_time
+
 
 class DVRouter(basics.DVRouterBase):
-    # NO_LOG = True # Set to True on an instance to disable its logging
-    # POISON_MODE = True # Can override POISON_MODE here
-    # DEFAULT_TIMER_INTERVAL = 5 # Can override this yourself for testing
+    NO_LOG = True # Set to True on an instance to disable its logging
+    POISON_MODE = True # Can override POISON_MODE here
+    DEFAULT_TIMER_INTERVAL = 5 # Can override this yourself for testing
 
     def __init__(self):
         """
@@ -20,6 +41,8 @@ class DVRouter(basics.DVRouterBase):
 
         """
         self.start_timer()  # Starts calling handle_timer() at correct rate
+        self.port_latency_map = {}
+        self.host_route_map = {}
 
     def handle_link_up(self, port, latency):
         """
@@ -29,7 +52,9 @@ class DVRouter(basics.DVRouterBase):
         in.
 
         """
-        pass
+        self.port_latency_map[port] = latency
+        for host in self.host_route_map:
+            self.send(basics.RoutePacket(host, self.host_route_map[host].get_distance()), port)
 
     def handle_link_down(self, port):
         """
@@ -54,11 +79,14 @@ class DVRouter(basics.DVRouterBase):
         if isinstance(packet, basics.RoutePacket):
             pass
         elif isinstance(packet, basics.HostDiscoveryPacket):
-            pass
+            self.host_route_map[packet.src] = Route(self.port_latency_map[port], port, None)
+            self.send(basics.RoutePacket(packet.src, self.port_latency_map[port]), port, flood=True)
         else:
-            # Totally wrong behavior for the sake of demonstration only: send
-            # the packet back to where it came from!
-            self.send(packet, port=port)
+            # ping
+            if packet.dst in self.host_route_map:
+                host = self.host_route_map[packet.dst]
+                if host is not None and host.get_port() != port and host.get_distance() <= INFINITY:
+                    self.send(packet, host.get_port(), flood=False)
 
     def handle_timer(self):
         """
