@@ -29,9 +29,19 @@ def main():
         'dv_router',
         'tests.test_route_poisoning',
         extra_args=['--poison-mode'])
-
+    t.test('dv_router', 'tests.test_fallback_direct')
+    t.test('dv_router', 'tests.test_simple_route_test')
     # Add your own tests here.
-
+    t.test(
+        'dv_router',
+        'tests.test_count_to_infinity_v3',
+        extra_args=['--poison-mode'])
+    t.test('dv_router', 'tests.test_equal_cost_paths')
+    t.test('dv_router', 'tests.test_multiple_routers')
+    t.test('dv_router', 'tests.test_topo_candy')
+    t.test('dv_router', 'tests.test_topo_rand')
+    t.test('dv_router', 'tests.test_simple_split_horizon')
+    t.test('dv_router', 'tests.test_recover_count_infinity')
     t.finish()
 
 

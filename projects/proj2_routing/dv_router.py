@@ -6,26 +6,82 @@ import sim.basics as basics
 # We define infinity as a distance of 16.
 INFINITY = 16
 
+
 class Route:
     def __init__(self, distance, port, time):
-        self.distance = distance
-        self.port = port
-        self.time = time
+        self._distance = distance
+        self._port = port
+        self._time = time
 
     def get_distance(self):
-        return self.distance
+        return self._distance
 
     def get_port(self):
-        return self.port
+        return self._port
 
     def get_time(self):
-        return self.time
+        return self._time
 
-    def update_distance(self, new_distance):
-        self.distance = new_distance
+    def update_distance(self, new_distanceance):
+        self._distance = new_distanceance
 
     def update_time(self, new_time):
-        self.time = new_time
+        self._time = new_time
+
+
+class RoutingData:
+    def __init__(self):
+        self._port_latency_map = {}
+        self._host_route_map = {}
+        self._poisoned_route_map = {}
+
+    def set_port_latency(self, port, latency):
+        self._port_latency_map[port] = latency
+
+    def get_port_latency(self, port):
+        if port in self._port_latency_map:
+            return self._port_latency_map[port]
+        return None
+
+    def get_port_latency_map(self):
+        return self._port_latency_map
+
+    def set_route(self, host, distance, port, time):
+        new_route = Route(distance, port, time)
+        self._host_route_map[host] = new_route
+
+    def update_route_distance(self, host, distance):
+        self._host_route_map[host].update_distance(distance)
+
+    def update_route_time(self, host, time):
+        self._host_route_map[host].update_time(time)
+
+    def get_route(self, host):
+        if host in self._host_route_map:
+            return self._host_route_map[host]
+        return None
+
+    def null_route(self, host):
+        if host in self._host_route_map:
+            self._host_route_map[host] = None
+
+    def get_host_route_map(self):
+        return self._host_route_map
+
+    def get_poisoned_route(self, host):
+        if host in self._poisoned_route_map:
+            return self._poisoned_route_map[host]
+        return None
+
+    def get_poisoned_route_map(self):
+        return self._poisoned_route_map
+
+    def set_poisoned_route(self, host, route):
+        self._poisoned_route_map[host] = route
+
+    def delete_poisoned_route(self, host):
+        if host in self._poisoned_route_map:
+            del self._poisoned_route_map[host]
 
 
 class DVRouter(basics.DVRouterBase):
@@ -41,9 +97,7 @@ class DVRouter(basics.DVRouterBase):
 
         """
         self.start_timer()  # Starts calling handle_timer() at correct rate
-        self.port_latency_map = {}
-        self.host_route_map = {}
-        self.poisoned_route_map = {}
+        self.routing_data = RoutingData()
 
     def handle_link_up(self, port, latency):
         """
@@ -53,9 +107,11 @@ class DVRouter(basics.DVRouterBase):
         in.
 
         """
-        self.port_latency_map[port] = latency
-        for host in self.host_route_map:
-            self.send(basics.RoutePacket(host, self.host_route_map[host].get_distance()), port)
+        self.routing_data.set_port_latency(port, latency)
+        for host in self.routing_data.get_host_route_map():
+            route = self.routing_data.get_route(host)
+            if route:
+                self.send(basics.RoutePacket(host, route.get_distance()), port)
 
     def handle_link_down(self, port):
         """
@@ -64,13 +120,13 @@ class DVRouter(basics.DVRouterBase):
         The port number used by the link is passed in.
 
         """
-        for host in self.host_route_map:
-            val = self.host_route_map[host]
+        for host in self.routing_data.get_host_route_map():
+            val = self.routing_data.get_route(host)
             if val and val.get_port() == port:
                 if self.POISON_MODE:
-                    self.poisoned_route_map[host] = val
+                    self.routing_data.set_poisoned_route(host, val)
                     self.send(basics.RoutePacket(host, INFINITY), flood=True)
-                self.host_route_map[host] = None
+                self.routing_data.null_route(host)
 
     def handle_rx(self, packet, port):
         """
@@ -83,50 +139,52 @@ class DVRouter(basics.DVRouterBase):
 
         """
         #self.log("RX %s on %s (%s)", packet, port, api.current_time())
+
         if isinstance(packet, basics.RoutePacket):
-            if packet.latency + self.port_latency_map[port] < INFINITY:
-                new_dist = packet.latency + self.port_latency_map[port];
+            new_distance = packet.latency + self.routing_data.get_port_latency(port)
+            if new_distance < INFINITY:
                 if self.POISON_MODE:
-                    if packet.destination in self.poisoned_route_map:
-                        del self.poisoned_route_map[packet.destination]
+                    if self.routing_data.get_poisoned_route(packet.destination):
+                        self.routing_data.delete_poisoned_route(packet.destination)
                     self.send(basics.RoutePacket(packet.destination, INFINITY), port)
 
-                if packet.destination not in self.host_route_map.keys() or self.host_route_map[packet.destination] is \
-                        None or self.host_route_map[packet.destination].get_distance() > new_dist:
-                    self.host_route_map[packet.destination] = \
-                        Route(self.port_latency_map[port] + packet.latency, port, api.current_time())
-                    self.send(basics.RoutePacket(packet.destination, new_dist), port,flood=True)
+                if self.routing_data.get_route(packet.destination) is None or \
+                        self.routing_data.get_route(packet.destination).get_distance() > new_distance:
+                    self.routing_data.set_route(packet.destination, self.routing_data.get_port_latency(port) +
+                                                packet.latency, port, api.current_time())
+                    self.send(basics.RoutePacket(packet.destination, new_distance), port, flood=True)
 
                 else:
-                    if new_dist == self.host_route_map[packet.destination].get_distance():
-                        if self.host_route_map[packet.destination].get_time() < api.current_time():
-                            self.host_route_map[packet.destination] = Route(new_dist, port, api.current_time())
-                            self.send(basics.RoutePacket(packet.destination, new_dist), port, flood=True)
-                    if self.host_route_map[packet.destination].get_port() == port:
-                        if new_dist > self.host_route_map[packet.destination].get_distance():
-                            self.host_route_map[packet.destination].update_distance(new_dist)
-                            self.send(basics.RoutePacket(packet.destination, new_dist), port, flood=True)
-                        self.host_route_map[packet.destination].update_time(api.current_time())
+                    route = self.routing_data.get_route(packet.destination)
+                    if new_distance == route.get_distance():
+                        if route.get_time() < api.current_time():
+                            self.routing_data.set_route(packet.destination, new_distance, port, api.current_time())
+                            self.send(basics.RoutePacket(packet.destination, new_distance), port, flood=True)
+                    if route.get_port() == port:
+                        if new_distance > route.get_distance():
+                            self.routing_data.update_route_distance(packet.destination, new_distance)
+                            self.send(basics.RoutePacket(packet.destination, new_distance), port, flood=True)
+                        self.routing_data.update_route_time(packet.destination, api.current_time())
 
             elif packet.latency >= INFINITY and self.POISON_MODE:
-                for host in self.host_route_map:
+                for host in self.routing_data.get_host_route_map():
                     if host == packet.destination:
-                        if self.host_route_map[host] and self.host_route_map[host].get_port() == port:
+                        if self.routing_data.get_route(host) and self.routing_data.get_route(host).get_port() == port:
                             self.send(basics.RoutePacket(packet.destination, INFINITY), port, flood=True)
-                            self.poisoned_route_map[host] = self.host_route_map[host]
-                            self.host_route_map[host] = None
+                            self.routing_data.set_poisoned_route(host, self.routing_data.get_route(host))
+                            self.routing_data.null_route(host)
 
         elif isinstance(packet, basics.HostDiscoveryPacket):
-            self.host_route_map[packet.src] = Route(self.port_latency_map[port], port, -1)
-            self.send(basics.RoutePacket(packet.src, self.port_latency_map[port]), port, flood=True)
+            latency = self.routing_data.get_port_latency(port)
+            self.routing_data.set_route(packet.src, latency, port, -1)
+            self.send(basics.RoutePacket(packet.src, latency), port, flood=True)
 
         else:
             # ping
-            if packet.dst in self.host_route_map:
-                host = self.host_route_map[packet.dst]
+            if packet.dst in self.routing_data.get_host_route_map():
+                host = self.routing_data.get_route(packet.dst)
                 if host is not None and host.get_port() != port and host.get_distance() <= INFINITY:
                     self.send(packet, host.get_port(), flood=False)
-
 
     def handle_timer(self):
         """
@@ -138,27 +196,20 @@ class DVRouter(basics.DVRouterBase):
 
         """
         if self.POISON_MODE:
-            for p in self.poisoned_route_map:
-                self.send(basics.RoutePacket(p, INFINITY), flood=True)
-        for host in self.host_route_map:
-            if self.host_route_map[host]:
-                route_has_not_expired = api.current_time() - self.host_route_map[host].get_time() <= self.ROUTE_TIMEOUT
-                host_route = False
-                if self.host_route_map[host].get_time() == -1:
-                    host_route = True
-                if route_has_not_expired or host_route:
-                    self.update_neighbor(host)
+            for p_route in self.routing_data.get_poisoned_route_map():
+                self.send(basics.RoutePacket(p_route, INFINITY), flood=True)
+        for host in self.routing_data.get_host_route_map():
+            route = self.routing_data.get_route(host)
+            if route:
+                time_diff = api.current_time() - route.get_time()
+                if route.get_time() == -1 or time_diff <= self.ROUTE_TIMEOUT:
+                    if self.POISON_MODE:
+                        self.send(basics.RoutePacket(host, INFINITY), route.get_port())
+                    self.send(basics.RoutePacket(host, route.get_distance()), route.get_port(),
+                              flood=True)
                 else:
-                    self.expired_routes_update(host)
+                    if self.POISON_MODE:
+                        self.send(basics.RoutePacket(host, INFINITY), route.get_port())
+                        self.routing_data.set_poisoned_route(host, route)
+                    self.routing_data.null_route(host)
 
-    def update_neighbor(self, host):
-        if self.POISON_MODE:
-            self.send(basics.RoutePacket(host, INFINITY), self.host_route_map[host].get_port())
-        self.send(basics.RoutePacket(host, self.host_route_map[host].get_distance()),
-                  self.host_route_map[host].get_port(), flood=True)
-
-    def expired_routes_update(self, host):
-        if self.POISON_MODE:
-            self.send(basics.RoutePacket(host, INFINITY), self.host_route_map[host].get_port())
-            self.poisoned_route_map[host] = self.host_route_map[host]
-        self.host_route_map[host] = None
